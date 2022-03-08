@@ -411,9 +411,9 @@
 
 <h1 id="ferramentas-scielo-v2">Ferramentas Scielo v2</h1>
 <p><a href="https://doi.org/10.5281/zenodo.5168728"><img alt="DOI" src="https://zenodo.org/badge/DOI/10.5281/zenodo.5168728.svg" /></a> <a href="https://opensource.org/licenses/MIT"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg" /></a> <a href="https://www.python.org/"><img alt="made-with-python" src="https://img.shields.io/badge/Made%20with-Python-1f425f.svg" /></a></p>
-<p>No ano de 2020, desenvolvemos uma ferramenta para raspagem da base de artigos do Scielo.br. A ferramenta utilizava a biblioteca <code>BeautifulSoup</code> para coletar os dados. Entretanto, em 2021 o repositório Scielo.br passou por uma reestruturação completa.</p>
+<p>No ano de 2020, desenvolvemos uma ferramenta para raspagem da base de artigos do Scielo.br. A ferramenta, escrita em Python, utilizava a biblioteca <code>BeautifulSoup</code> para coletar os dados. Entretanto, em 2021 o repositório Scielo.br passou por uma reestruturação completa.</p>
 <p>Foi necessário, consequentemente, a reconstrução da ferramenta para lidar com a nova versão do site. Agora, utilizamos o <code>Selenium</code> para acessar e raspar os dados do repositório.</p>
-<p>Com a <code>ferramentas_scielo_v2</code> é possível realizar a raspagem por área do conhecimento ou <a href="#scielo_rev_v2py">por revista (ou uma lista de revistas)</a>. Também é possível optar pelo tipo de raspagem: apenas XML ou XML e PDFs.</p>
+<p>Com a <code>ferramentas_scielo_v2</code> é possível realizar a raspagem <a href="https://labhdufba.github.io/ferramentas_scielo_v2/#raspagem-por-area-de-conhecimento">por área do conhecimento</a> ou <a href="https://labhdufba.github.io/ferramentas_scielo_v2/#raspagem-por-revista-ou-por-lista-de-revistas">por revista (ou uma lista de revistas)</a>. Também é possível optar pelo tipo de raspagem: apenas XML ou XML e PDFs.</p>
 <p>Também disponibilizamos uma ferramenta para converter os XMLs para CSV, com o script <code>scielo_xml_to_csv/run.py</code>.</p>
 <h2 id="instalacao">Instalação</h2>
 <p>Para executar a ferramenta é preciso clonar ou fazer download do repositório para sua máquina. Antes de executar os scripts, é preciso preparar seu computador, como mostramos abaixo.</p>
@@ -432,18 +432,6 @@ para Mac.</p>
 <p>Agora é possível executar a ferramenta direto do prompt de comando do Windows ou pelo terminal do Linux, ou utilizar as diversas <a href="https://pt.wikipedia.org/wiki/Ambiente_de_desenvolvimento_integrado">IDE</a> disponíveis.</p>
 <h2 id="utilizacao">Utilização</h2>
 <p>Na pasta da ferramenta existem dois arquivos python que permitem a execução de opções distintas de raspagem. O primeiro, <code>scielo_v2.py</code>, permite a raspagem de todas as revistas de uma determinada área do conhecimento. O segundo, <code>scielo_rev_v2.py</code>, permite a raspagem por revista ou lista de revistas específicas.</p>
-<p>Exemplo de como executar utilizando o terminal do Linux, após instalar o Python3.8:</p>
-<ol>
-<li>Acesse o diretório em que o arquivo .py está salvo:
-   <div class="highlight"><pre><span></span><code>$ <span class="nb">cd</span> user/local
-</code></pre></div></li>
-<li>Instale as bibliotecas requeridas:
-   <div class="highlight"><pre><span></span><code>$ pip3 install -r requirements.txt
-</code></pre></div></li>
-<li>Execute o arquivo usando Python3.8
-   <div class="highlight"><pre><span></span><code>$ python3 scielo_v2.py
-</code></pre></div></li>
-</ol>
 <h3 id="raspagem-por-area-de-conhecimento">Raspagem por área de conhecimento</h3>
 <p>Esse script permite ao usuário selecionar qual assunto pretende raspar de acordo com a categorização estabelecida pela plataforma <a href="https://www.scielo.br/journals/thematic?status=current">Scielo.br</a>. </p>
 <p>Para isso é preciso executar o seguinte comando, do interior da pasta onde o arquivo está localizado:</p>
@@ -466,11 +454,9 @@ A seguinte mensagem será exibida:</p>
 Após a definição do assunto, é preciso definir o tipo de raspagem: </p>
 <ol>
 <li>Realizar a raspagem de todos os arquivos XML de todas as edições de todas as revistas da área selecionada: opção <code>1</code>;</li>
-<li>
-<p>Realizar a raspagem de todos os arquivos XML e PDF de todas as edições de todas as revistas da área selecionada: opção <code>2</code>.</p>
-<p><img alt="⚠️" class="emojione" src="https://cdnjs.cloudflare.com/ajax/libs/emojione/2.2.7/assets/png/26a0.png" title=":warning:" /> Devido ao volume de dados, contando dezenas de milhares de artigos, o download de todos os arquivos PDF demandará  muito tempo e uso intenso de sua máquina.</p>
-</li>
+<li>Realizar a raspagem de todos os arquivos XML e PDF de todas as edições de todas as revistas da área selecionada: opção <code>2</code>.</li>
 </ol>
+<p><img alt="⚠️" class="emojione" src="https://cdnjs.cloudflare.com/ajax/libs/emojione/2.2.7/assets/png/26a0.png" title=":warning:" /> Devido ao volume de dados, contando dezenas de milhares de artigos, o download de todos os arquivos PDF demandará  muito tempo e uso intenso de sua máquina.</p>
 <p><img alt="⚠️" class="emojione" src="https://cdnjs.cloudflare.com/ajax/libs/emojione/2.2.7/assets/png/26a0.png" title=":warning:" /> Os arquivos XML possuem todos os metadados dos artigos, incluindo o texto completo e as referências bibliográficas.</p>
 <h3 id="raspagem-por-revista-ou-por-lista-de-revistas">Raspagem por revista ou por lista de revistas</h3>
 <p>Nesse script é possível raspar uma revista ou uma lista de revistas específicas através de seu nome.</p>
