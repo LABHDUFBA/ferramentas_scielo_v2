@@ -13,67 +13,85 @@ saveMode = ''
 def main():
     global saveMode
     while (saveMode != 1 and saveMode != 2):
-        url = 'https://www.scielo.br//journals/thematic?status=current'
-        # Definição da área do conhecimento para raspagem
+        url = 'https://www.scielo.br/journals/thematic?status=current&lang=pt'
+
         print('-=-Definição da área temática-=-\n')
         area = str(input(
-                    '- Opções:\n'
-                    '1- Ciências Agrárias\n'
-                    '2- Ciências Biológicas\n'
-                    '3- Ciências da Saúde\n'
-                    '4- Ciências Exatas e da Terra\n'
-                    '5- Ciências Humanas\n'
-                    '6- Ciências Sociais Aplicadas\n'
-                    '7- Engenharias\n'
-                    '8- Linguística, Letras e Artes\n'
-                    'Digite o número correspondente à área temática que deseja raspar: \n'))
-        print('-='*50)
-        saveMode = int(input('-=-Definição do tipo de raspagem-=-\n'
-                             '1- Salvar os XMLs;\n'
-                             '2- Salvar os XMLs e baixar os PDFs.\n'
-                             'Tipo de Raspagem (1 ou 2): '))
-        diretorio = os.path.join('scielo',timestr)
+            '- Opções:\n'
+            '1- Ciências Agrárias\n'
+            '2- Ciências Biológicas\n'
+            '3- Ciências da Saúde\n'
+            '4- Ciências Exatas e da Terra\n'
+            '5- Ciências Humanas\n'
+            '6- Ciências Sociais Aplicadas\n'
+            '7- Engenharias\n'
+            '8- Linguística, Letras e Artes\n'
+            'Digite o número correspondente à área temática que deseja raspar: \n'
+        ))
+        print('-=' * 50)
+        saveMode = int(input(
+            '-=-Definição do tipo de raspagem-=-\n'
+            '1- Salvar os XMLs;\n'
+            '2- Salvar os XMLs e baixar os PDFs.\n'
+            'Tipo de Raspagem (1 ou 2): '
+        ))
+
+        diretorio = os.path.join('scielo', timestr)
         if not os.path.exists(diretorio):
-            #Se a pasta ainda não existir, cria a pasta
             os.makedirs(diretorio)
-        # Definição das opções do driver
+
         firefox_options = Options()
         firefox_options.add_argument('-lang=pt-BR')
-        firefox_options.add_argument("--headless")
-        firefox_options.add_argument("--no-sandbox")
-        firefox_options.add_argument("--start-maximized")
+        firefox_options.set_preference('intl.accept_languages', 'pt-BR, pt')
+        firefox_options.add_argument('--headless')
+        firefox_options.add_argument('--no-sandbox')
+        firefox_options.add_argument('--start-maximized')
+
         driver = webdriver.Firefox(options=firefox_options)
         driver.get(url)
-        #botão de aceitar cookies
+
         try:
-            cookies = driver.find_element(By.CLASS_NAME,'alert-cookie-notification')
-            #Clicando para fechar o aviso
-            WebDriverWait(driver, 10).until(EC.element_to_be_clickable(
-                (By.XPATH, '/html/body/div[6]/a[2]')
-                )).click()
-        except:
+            driver.find_element(By.CLASS_NAME, 'alert-cookie-notification')
+            try:
+                WebDriverWait(driver, 5).until(
+                    EC.element_to_be_clickable((
+                        By.CSS_SELECTOR,
+                        'a#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll, '
+                        'div.alert-cookie-notification a'
+                    ))
+                ).click()
+            except Exception:
+                WebDriverWait(driver, 5).until(
+                    EC.element_to_be_clickable((
+                        By.XPATH,
+                        "//div[contains(@class,'alert-cookie-notification')]//a[1]"
+                    ))
+                ).click()
+        except Exception:
             pass
-        # set locale for pt: find element by xpath and try to find element by class name
-        locale_div = driver.find_element(By.XPATH, '/html/body/header/div/div/div[3]')
-        # try to find element by class name and click it if found
+
         try:
-            local_pt = locale_div.find_element(By.CLASS_NAME, 'lang-pt').click()
-        except:
+            driver.find_element(By.CSS_SELECTOR, 'a.lang-pt').click()
+            time.sleep(0.5)
+        except Exception:
             pass
-        journal_table = driver.find_element(By.ID,'journals_table_body')
-        tematica = journal_table.find_element(By.ID,f"heading-{area}")
+
+        journal_table = driver.find_element(By.ID, 'journals_table_body')
+        tematica = journal_table.find_element(By.ID, f'heading-{area}')
         print(f'\n-=-{tematica.text}-=-')
-        btn = tematica.find_element(By.XPATH, 'following-sibling::div').find_element(By.TAG_NAME, 'table')
+
+        _ = tematica.find_element(By.XPATH, 'following-sibling::div').find_element(By.TAG_NAME, 'table')
         time.sleep(1)
-        area_box = driver.find_element(By.ID,f'collapseContent-{area}')
-        journal_list = area_box.find_elements(By.CLASS_NAME,'collectionLink ')
+        area_box = driver.find_element(By.ID, f'collapseContent-{area}')
+        journal_list = area_box.find_elements(By.CLASS_NAME, 'collectionLink ')
+
         report_scrape(diretorio, timestr, area, saveMode)
         for journal in journal_list:
             link = journal.get_attribute("href")
-            link_final = link+'grid'
-            #Função para acessar o grid
-            name = journal.find_element(By.CLASS_NAME,"journalTitle").text
+            link_final = link + 'grid'
+            name = journal.find_element(By.CLASS_NAME, "journalTitle").text
             revistas(diretorio, link, link_final, name, saveMode)
+
         print('fim da raspagem')
 
 if __name__ == "__main__":
