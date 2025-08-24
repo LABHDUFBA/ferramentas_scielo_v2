@@ -41,41 +41,51 @@ def revistas(diretorio, link, link_journal, journal_name, saveMode, ano_minimo: 
 
     time.sleep(1)
 
-    alterar = re.sub(r"[(,.:\(\)<>?/\\|@+)]", "", journal_name)
-    pasta = re.sub(r"\s+", "_", alterar)
+    # Se o nome da revista não vier do caller, use o <h1> da página
+    try:
+        effective_name = (journal_name or "").strip()
+        if not effective_name:
+            effective_name = driver.find_element(By.TAG_NAME, "h1").text.strip()
+    except Exception:
+        effective_name = journal_name or ""
+
+    alterar = re.sub(r"[(,.:\(\)<>?/\\|@+)]", "", effective_name)
+    pasta = re.sub(r"\s+", "_", alterar) or "Sem_Nome"
+
+    print(f"\nRevista: {effective_name} ({link})\nPasta: {pasta}")
 
     try:
         issue_box = WebDriverWait(driver, 5).until(
             EC.presence_of_element_located((By.ID, "issueList"))
         )
     except TimeoutException:
-        print(f"ℹ️ {journal_name}: nenhum 'issueList' encontrado (revista sem edições). Pulando.")
+        print(f"\nℹ️ {journal_name}: nenhum 'issueList' encontrado (revista sem edições). Pulando.")
         driver.quit()
         return
 
     try:
         issue_table = issue_box.find_element(By.TAG_NAME, "table")
     except NoSuchElementException:
-        print(f"ℹ️ {journal_name}: não há tabela de edições disponível. Pulando.")
+        print(f"\nℹ️ {journal_name}: não há tabela de edições disponível. Pulando.")
         driver.quit()
         return
 
     anchors = issue_table.find_elements(By.TAG_NAME, "a")
     issue_links = [a.get_attribute("href") for a in anchors if "/i/" in (a.get_attribute("href") or "")]
     if not issue_links:
-        print(f"ℹ️ {journal_name}: sem links de edições. Pulando.")
+        print(f"\nℹ️ {journal_name}: sem links de edições. Pulando.")
         driver.quit()
         return
 
     for issue_link in issue_links:
         ano = _ano_da_edicao(issue_link)
         if ano is None:
-            print(f"⚠️ Ignorando link sem ano: {issue_link}")
+            print(f"\n⚠️ Ignorando link sem ano: {issue_link}")
             continue
 
         if ano < ano_minimo:
             print(
-                f"⏭️ {journal_name}: primeira edição abaixo de {ano_minimo} ({ano}). "
+                f"\n⏭️ {journal_name}: primeira edição abaixo de {ano_minimo} ({ano}). "
                 f"Indo para a próxima revista."
             )
             break
