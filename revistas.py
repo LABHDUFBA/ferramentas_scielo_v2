@@ -17,7 +17,7 @@ def _ano_da_edicao(href: str) -> int | None:
     return int(m.group(1)) if m else None
 
 
-def revistas(diretorio, link, link_journal, journal_name, saveMode, ano_minimo: int = 2025):
+def revistas(diretorio, link, link_journal, journal_name, saveMode, ano_minimo: int = 2023):
     """
     Acessa a revista e processa apenas edições com ano >= ano_minimo.
     Se encontrar uma edição com ano < ano_minimo, pula para a próxima revista.
