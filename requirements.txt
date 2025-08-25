@@ -3,3 +3,4 @@ pandas
 selenium
 webdriver-manager
 wget
+lxml
