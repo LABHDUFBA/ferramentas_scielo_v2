@@ -1,5 +1,7 @@
 # scielo directory with results
 scielo/
+*/*.jsonl
+*/*.ndjson
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
