@@ -179,6 +179,9 @@ def extract_full_text(root: etree._Element) -> Tuple[Optional[str], List[Dict[st
 
 # ---------------------- parsing principal ----------------------
 
+def get_or_fallback(root, path, ns, fallback):
+    el = _find(root, path, ns)
+    return el if el is not None else fallback
 
 def parse_xml_to_record(
     xml_path: Path,
@@ -198,8 +201,8 @@ def parse_xml_to_record(
         record["article_type"] = article_type
 
     # front / article-meta
-    front = _find(root, "front", ns) or root
-    article_meta = _find(front, "article-meta", ns) or front
+    front = get_or_fallback(root, "front", ns, root)
+    article_meta = get_or_fallback(front, "article-meta", ns, front)
 
     # títulos e traduções
     title_group = _find(article_meta, "title-group", ns)
