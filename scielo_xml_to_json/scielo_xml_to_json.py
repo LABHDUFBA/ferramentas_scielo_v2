@@ -509,21 +509,27 @@ def parse_xml_to_record(
 
     # referências
     references: List[Dict[str, Any]] = []
-    ref_list = _find(article_meta, "ref-list", ns)
-    if ref_list is not None:
+    # Em JATS/SciELO o <ref-list> costuma estar em <back>; buscamos de forma abrangente:
+    for ref_list in _findall(root, ".//ref-list", ns):
         for ref in _findall(ref_list, "ref", ns):
             rid = ref.get("id")
-            mixed = _txt(_find(ref, "mixed-citation", ns)) or _txt(ref)
-
+    
+            # Texto livre da referência (mais resiliente)
+            mixed = (
+                _txt(_find(ref, "mixed-citation", ns))
+                or _txt(_find(ref, "citation", ns))
+                or _txt(ref)
+            )
+    
             structured: Dict[str, Any] = {}
             ec = _find(ref, "element-citation", ns)
             if ec is not None:
                 structured["publication_type"] = ec.get("publication-type")
-
+    
                 # autores da referência
                 pgroup = _find(ec, "person-group", ns)
                 if pgroup is not None:
-                    authors = []
+                    authors: List[Dict[str, Optional[str]]] = []
                     for nm in _findall(pgroup, "name", ns):
                         authors.append(
                             _prune(
@@ -535,16 +541,16 @@ def parse_xml_to_record(
                         )
                     if authors:
                         structured["authors"] = authors
-
+    
                 # títulos e fonte
                 structured["article_title"] = _txt(_find(ec, "article-title", ns))
                 structured["source"] = _txt(_find(ec, "source", ns))
                 structured["comment"] = _txt(_find(ec, "comment", ns))
-
+    
                 # editora e local
                 structured["publisher_loc"] = _txt(_find(ec, "publisher-loc", ns))
                 structured["publisher_name"] = _txt(_find(ec, "publisher-name", ns))
-
+    
                 # dados bibliográficos
                 structured["year"] = _txt(_find(ec, "year", ns))
                 structured["volume"] = _txt(_find(ec, "volume", ns))
@@ -552,22 +558,31 @@ def parse_xml_to_record(
                 structured["fpage"] = _txt(_find(ec, "fpage", ns))
                 structured["lpage"] = _txt(_find(ec, "lpage", ns))
                 structured["page_range"] = _txt(_find(ec, "page-range", ns))
-
-                # persistentes
-                doi_pub = _find(ec, "pub-id[@pub-id-type='doi']", ns)
-                structured["doi"] = (
-                    (doi_pub.text or "").strip()
-                    if doi_pub is not None and doi_pub.text
-                    else None
-                )
-                ext_any = _find(ec, "ext-link", ns)
-                if ext_any is not None:
+    
+                # identificadores persistentes (mantém 'doi' e 'uri' originais; adiciona listas opcionais)
+                dois = [
+                    _txt(el)
+                    for el in _findall(ec, "pub-id[@pub-id-type='doi']", ns)
+                    if _txt(el)
+                ]
+                structured["doi"] = dois[0] if dois else None
+                structured["dois"] = dois or None  # opcional, sem quebrar compatibilidade
+    
+                uris: List[str] = []
+                for el in _findall(ec, "ext-link", ns):
                     href = (
-                        ext_any.get("{http://www.w3.org/1999/xlink}href")
-                        or ext_any.get("xlink:href")
+                        el.get("{http://www.w3.org/1999/xlink}href")
+                        or el.get("xlink:href")
                     )
-                    structured["uri"] = href or _txt(ext_any)
-
+                    if href:
+                        uris.append(href)
+                    else:
+                        txt = _txt(el)
+                        if txt:
+                            uris.append(txt)
+                structured["uri"] = uris[0] if uris else None
+                structured["uris"] = uris or None  # opcional
+    
             references.append(
                 _prune(
                     {
@@ -577,9 +592,10 @@ def parse_xml_to_record(
                     }
                 )
             )
+    
     if references:
         record["references"] = references
-
+    
     # incluir XML bruto
     if include_raw_xml:
         record["raw_xml"] = xml_bytes.decode("utf-8", errors="ignore")
