@@ -7,6 +7,7 @@ Usa driver_utils para downloads eficientes via JavaScript fetch(),
 
 import os
 import re
+import logging
 
 from driver_utils import download_xml, download_pdf, article_id_from_link
 from reports import report_erro, report_erro_pdf
@@ -18,11 +19,12 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException
 # Listas globais de erros (mantidas para compatibilidade com reports.py)
 error_xml_list = []
 error_pdf_list = []
+LOGGER = logging.getLogger("scielo")
 
 LANG_PREF = ["pt", "es", "en"]
 
 
-def get_issue(diretorio, link, issue_link, pasta, saveMode, driver):
+def get_issue(diretorio, link, issue_link, pasta, saveMode, driver, uploader=None):
     """
     Processa uma edição de uma revista do SciELO.
 
@@ -31,6 +33,9 @@ def get_issue(diretorio, link, issue_link, pasta, saveMode, driver):
 
     O driver deve ter feito warm-up prévio (cookies do SciELO).
     """
+    # Error lists are per issue; otherwise old failures are reported repeatedly.
+    error_xml_list.clear()
+    error_pdf_list.clear()
     driver.get(issue_link)
     try:
         WebDriverWait(driver, 15).until(
@@ -117,14 +122,16 @@ def get_issue(diretorio, link, issue_link, pasta, saveMode, driver):
 
         if os.path.exists(out_xml):
             print(f"  ⏩ XML já existe: {full_name}")
-            continue
-
-        print(f"  ↓ XML ({chosen_lang}): {aid}")
-        if download_xml(driver, xml_link, out_xml):
-            print(f"  ✅ {full_name}")
         else:
-            print(f"  ✗ Falha: {full_name}")
-            error_xml_list.append(xml_link)
+            print(f"  ↓ XML ({chosen_lang}): {aid}")
+            if download_xml(driver, xml_link, out_xml):
+                print(f"  ✅ {full_name}")
+                if uploader:
+                    uploader.upload(out_xml, diretorio)
+            else:
+                print(f"  ✗ Falha: {full_name}")
+                error_xml_list.append(xml_link)
+                LOGGER.warning("XML download failed", extra={"event": "xml_download_failed", "issue_url": issue_link, "file_path": out_xml})
 
         # PDF (modo 2)
         if saveMode == 2:
@@ -139,13 +146,16 @@ def get_issue(diretorio, link, issue_link, pasta, saveMode, driver):
             print(f"  ↓ PDF: {aid}")
             if download_pdf(driver, pdf_link, out_pdf):
                 print(f"  ✅ {pdf_name}")
+                if uploader:
+                    uploader.upload(out_pdf, diretorio)
             else:
                 print(f"  ✗ PDF falha: {pdf_name}")
                 error_pdf_list.append(pdf_link)
+                LOGGER.warning("PDF download failed", extra={"event": "pdf_download_failed", "issue_url": issue_link, "file_path": out_pdf})
 
     # Relatórios de erro
     base_xml_dir = os.path.join(diretorio, "XML", pasta)
     if error_xml_list:
         report_erro(base_xml_dir, error_xml_list, saveMode)
     if error_pdf_list:
-        report_erro_pdf(pasta, error_pdf_list, saveMode)
+        report_erro_pdf(path_pdf, error_pdf_list, saveMode)

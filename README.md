@@ -143,9 +143,24 @@ O script aceita variáveis de ambiente para execução não-interativa (útil pa
 
 | Variável | Descrição | Exemplo |
 |---|---|---|
-| `SCIELO_AREA` | Número da área (1–8) | `6` |
+| `SCIELO_AREA` | Número da área (1–8; somente `scielo_v2.py`) | `6` |
 | `SCIELO_MODE` | Tipo de raspagem (1 ou 2) | `1` |
 | `SCIELO_ANO_MINIMO` | Ano mínimo (0 = sem filtro) | `2023` |
+
+Quando presentes, as variáveis eliminam somente os respectivos prompts. A lista de
+revistas em `scielo_rev_v2.py` continua sendo informada interativamente.
+
+### Upload opcional para S3
+
+Os dois raspadores podem enviar cada XML/PDF ao S3 assim que o download termina:
+
+```bash
+python3 scielo_v2.py --s3-bucket meu-bucket --s3-prefix scielo/2026-07-23
+```
+
+Use `--s3-endpoint-url https://minio.exemplo` para serviços compatíveis com S3 e
+`--s3-delete-local` para remover cada arquivo **somente após** o upload bem-sucedido.
+As credenciais são obtidas pela cadeia padrão do boto3 (variáveis AWS, perfil ou role).
 
 ## Conversão de XML para CSV
 
