@@ -11,12 +11,15 @@ Estrutura:
                                                    ↳ reports.py
 """
 
+import argparse
 import os
 import time
 
-from driver_utils import criar_driver, warmup_driver
+from driver_utils import criar_driver, warmup_driver, close_driver
 from revistas import revistas
 from reports import report_scrape
+from logging_utils import configure_logging
+from s3_utils import S3Uploader
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -51,9 +54,34 @@ AREAS_NOMES = {
 URL_JORNAIS = "https://www.scielo.br/journals/thematic?status=current&lang=pt"
 
 
+def _positive_int(value, name, minimum=0):
+    try:
+        number = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} deve ser um número inteiro") from exc
+    if number < minimum:
+        raise ValueError(f"{name} deve ser maior ou igual a {minimum}")
+    return number
+
+
+def _parse_args():
+    parser = argparse.ArgumentParser(description="Raspador SciELO por área")
+    parser.add_argument("--s3-bucket", help="Bucket S3 de destino")
+    parser.add_argument("--s3-prefix", default="", help="Prefixo das chaves S3")
+    parser.add_argument("--s3-endpoint-url", help="Endpoint S3 compatível (ex.: MinIO)")
+    parser.add_argument("--s3-delete-local", action="store_true", help="Apaga cada arquivo local após upload S3 bem-sucedido")
+    return parser.parse_args()
+
+
 def main():
     global saveMode
-    area = ""
+    args = _parse_args()
+    logger = configure_logging()
+    uploader = S3Uploader(args.s3_bucket, args.s3_prefix, args.s3_endpoint_url, args.s3_delete_local) if args.s3_bucket else None
+    area = os.getenv("SCIELO_AREA", "").strip()
+
+    if area and area not in AREAS:
+        raise ValueError("SCIELO_AREA deve ser um valor entre 1 e 8")
 
     while area not in AREAS:
         print("-=- Definição da área temática -=-\n")
@@ -70,6 +98,11 @@ def main():
             "Digite o número correspondente à área temática que deseja raspar: \n"
         ))
 
+    configured_mode = os.getenv("SCIELO_MODE", "").strip()
+    if configured_mode:
+        saveMode = _positive_int(configured_mode, "SCIELO_MODE", 1)
+        if saveMode not in (1, 2):
+            raise ValueError("SCIELO_MODE deve ser 1 ou 2")
     while saveMode not in (1, 2):
         print("-=" * 50)
         saveMode = int(input(
@@ -80,23 +113,31 @@ def main():
         ))
 
     # Filtro por ano mínimo
-    print("-=" * 50)
-    filtrar = input(
-        "-=- Definição de filtro por ano -=-\n"
-        "Deseja filtrar por ano mínimo? (s/n): "
-    ).strip().lower()
-    if filtrar == "s":
-        ano_input = input("Filtrar edições a partir de qual ano? [2023]: ").strip()
-        try:
-            ano_minimo = int(ano_input) if ano_input else 2023
-        except ValueError:
-            print("Ano inválido. Iniciando sem filtro de ano.")
-            ano_minimo = 0
+    configured_year = os.getenv("SCIELO_ANO_MINIMO", "").strip()
+    if configured_year:
+        ano_minimo = _positive_int(configured_year, "SCIELO_ANO_MINIMO")
     else:
-        ano_minimo = 0
+        print("-=" * 50)
+        filtrar = input(
+            "-=- Definição de filtro por ano -=-\n"
+            "Deseja filtrar por ano mínimo? (s/n): "
+        ).strip().lower()
+        if filtrar == "s":
+            ano_input = input("Filtrar edições a partir de qual ano? [2023]: ").strip()
+            try:
+                ano_minimo = int(ano_input) if ano_input else 2023
+            except ValueError:
+                print("Ano inválido. Iniciando sem filtro de ano.")
+                ano_minimo = 0
+        else:
+            ano_minimo = 0
 
     diretorio = os.path.join("scielo", timestr)
     os.makedirs(diretorio, exist_ok=True)
+    logger.info(
+        "Scrape started",
+        extra={"event": "scrape_started", "file_path": diretorio},
+    )
 
     # ── Cria e prepara o driver ──────────────────────────────────────────
     print("\nInicializando navegador...")
@@ -106,7 +147,7 @@ def main():
     if not warmup_driver(driver):
         print("ERRO: Não foi possível carregar o SciELO (bloqueio anti-bot).")
         print("Tente rodar novamente em alguns minutos.")
-        driver.quit()
+        close_driver(driver)
         return
 
     driver.get(URL_JORNAIS)
@@ -119,7 +160,6 @@ def main():
             )
         except TimeoutException:
             print("ERRO: Não foi possível carregar a lista de revistas.")
-            driver.quit()
             return
 
         # Clicar no accordion da área
@@ -142,7 +182,6 @@ def main():
                 time.sleep(1)
         except NoSuchElementException:
             print(f"ERRO: Não encontrou o botão da área {area_nome}")
-            driver.quit()
             return
 
         # Extrair dados das revistas imediatamente (evita StaleElementReference)
@@ -191,7 +230,7 @@ def main():
             try:
                 revistas(
                     diretorio, link, link_grid, name, saveMode, ano_minimo,
-                    driver=driver
+                    driver=driver, uploader=uploader
                 )
             except Exception as e:
                 print(f"  ✗ ERRO em {name}: {e}")
@@ -203,9 +242,10 @@ def main():
         import traceback
         traceback.print_exc()
     finally:
-        driver.quit()
+        close_driver(driver)
 
     print("\nFim da raspagem")
+    logger.info("Scrape finished", extra={"event": "scrape_finished", "file_path": diretorio})
 
 
 if __name__ == "__main__":

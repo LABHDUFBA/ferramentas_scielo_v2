@@ -4,3 +4,4 @@ selenium
 webdriver-manager
 wget
 lxml
+boto3

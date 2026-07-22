@@ -14,6 +14,8 @@ import re
 import base64
 import time
 import tempfile
+import shutil
+import logging
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
@@ -27,6 +29,15 @@ from selenium.common.exceptions import (
     StaleElementReferenceException,
 )
 from webdriver_manager.chrome import ChromeDriverManager
+
+
+LOGGER = logging.getLogger("scielo")
+_BROWSER_BINARIES = (
+    "/snap/bin/chromium",
+    "/opt/google/chrome/chrome",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/google-chrome",
+)
 
 
 # ── Configuração do driver ──────────────────────────────────────────────────
@@ -50,8 +61,15 @@ def criar_driver():
     port = _next_debug_port()
     tmp = tempfile.mkdtemp(prefix="chrome-scielo-")
 
+    binary_location = next((path for path in _BROWSER_BINARIES if os.path.isfile(path) and os.access(path, os.X_OK)), None)
+    if binary_location is None:
+        searched = ", ".join(_BROWSER_BINARIES)
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise RuntimeError(f"Chrome/Chromium não encontrado. Caminhos verificados: {searched}")
+
     options = ChromeOptions()
-    options.binary_location = "/snap/bin/chromium"
+    options.binary_location = binary_location
+    LOGGER.info("Browser binary selected", extra={"event": "browser_binary_selected", "file_path": binary_location})
     # Headless novo (Chrome 109+)
     options.add_argument("--headless=new")
     # Segurança no Linux snap
@@ -87,10 +105,45 @@ def criar_driver():
     options.add_experimental_option("prefs", prefs)
 
     service = ChromeService(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=options)
+    try:
+        driver = webdriver.Chrome(service=service, options=options)
+    except Exception:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
     # implicitly_wait = 0 (usamos explicit waits)
     driver.implicitly_wait(0)
+    driver._scielo_profile_dir = tmp
     return driver
+
+
+def close_driver(driver):
+    """Quit the browser and remove its disposable Chrome profile."""
+    profile_dir = getattr(driver, "_scielo_profile_dir", None)
+    try:
+        driver.quit()
+    except Exception:
+        LOGGER.exception("Error while closing browser", extra={"event": "driver_close_failed"})
+    finally:
+        if profile_dir:
+            shutil.rmtree(profile_dir, ignore_errors=True)
+
+
+def _atomic_write(dest, content, binary=False):
+    """Write a complete download atomically, with a unique temporary file."""
+    destination_dir = os.path.dirname(dest) or "."
+    os.makedirs(destination_dir, exist_ok=True)
+    fd, temporary_path = tempfile.mkstemp(prefix=".scielo-", suffix=".part", dir=destination_dir)
+    try:
+        mode = "wb" if binary else "w"
+        with os.fdopen(fd, mode, encoding=None if binary else "utf-8") as handle:
+            handle.write(content)
+        os.replace(temporary_path, dest)
+    except Exception:
+        try:
+            os.unlink(temporary_path)
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def warmup_driver(driver):
@@ -200,9 +253,7 @@ def download_xml(driver, xml_url: str, dest: str, retries: int = 2) -> bool:
                     _save_debug(dest, xml_text)
                     return False
 
-                os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
-                with open(dest, "w", encoding="utf-8") as f:
-                    f.write(xml_text)
+                _atomic_write(dest, xml_text)
                 return True
 
             # Se fetch retornou 403, tenta navegação direta
@@ -231,9 +282,11 @@ def download_pdf(driver, pdf_url: str, dest: str, retries: int = 2) -> bool:
             result = driver.execute_async_script(_FETCH_PDF_JS, pdf_url)
 
             if result and result.get("success"):
-                os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
-                with open(dest, "wb") as f:
-                    f.write(base64.b64decode(result["data"]))
+                pdf_bytes = base64.b64decode(result["data"], validate=True)
+                if not pdf_bytes.startswith(b"%PDF-"):
+                    LOGGER.warning("Invalid PDF response", extra={"event": "invalid_pdf", "file_path": dest})
+                    continue
+                _atomic_write(dest, pdf_bytes, binary=True)
                 return True
 
             elif result and result.get("code") == 403:
@@ -329,9 +382,7 @@ def _download_xml_via_navigation(driver, xml_url: str, dest: str) -> bool:
             _save_debug(dest, xml_text)
             return False
 
-        os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
-        with open(dest, "w", encoding="utf-8") as f:
-            f.write(xml_text)
+        _atomic_write(dest, xml_text)
         return True
 
     except Exception:

@@ -1,106 +1,52 @@
+"""Text reports for scraper runs and download failures."""
+
 import os
 from datetime import datetime
 
-now = datetime.now()
-data_hora = now.strftime("%Y-%m-%d_%H-%M-%S")
 
-def report_scrape(diretorio, time, theme, saveMode):
-    '''
-    Função para criar relatório geral da raspagem
-    '''
-    if saveMode == 1:
-        tipo = 'Apenas XLM'
-    else:
-        tipo = 'XML e Download de PDF'
-    if theme == '1':
-        theme = 'Ciências Agrárias'
-    elif theme == '2':
-        theme = 'Ciências Biológicas'
-    elif theme == '3':
-        theme = 'Ciências da Saúde'
-    elif theme == '4':
-        theme = 'Ciêncas Exatas e da Terra'
-    elif theme == '5':
-        theme = 'Ciências Humanas'
-    elif theme == '6':
-        theme = 'Ciências Sociais Aplicadas'
-    elif theme == '7':
-        theme = 'Engenharias'
-    elif theme == '8':
-        theme = 'Linguística, Letras e Artes'
-    out_relatório = os.path.join(diretorio, 'RELATÓRIO_GERAL')
-    #Criando relatório
-    relatório = open(f'{out_relatório}_{time}.txt', 'w')
-    #Inserindo dados no relatório
-    relatório.write(
-        f'=-=-=-=-=-Relatório da raspagem-=-=-=-=-=\n'
-        f'- Data e hora: {time};\n'
-        f'- Área Temática: {theme};\n'
-        f'- Tipo de raspagem: {tipo}\n'
-        )
-    relatório.close
+THEMES = {
+    "1": "Ciências Agrárias", "2": "Ciências Biológicas",
+    "3": "Ciências da Saúde", "4": "Ciências Exatas e da Terra",
+    "5": "Ciências Humanas", "6": "Ciências Sociais Aplicadas",
+    "7": "Engenharias", "8": "Linguística, Letras e Artes",
+}
 
-def report_scrape_rev(diretorio, time, revList, saveMode):
-    '''
-    Função para criar relatório de raspagem de lista de revistas
-    '''
-    if saveMode == 1:
-        tipo = 'Apenas XLM'
-    else:
-        tipo = 'XML e Download de PDF'
-    out_relatório = os.path.join(diretorio, 'RELATÓRIO_GERAL_REVISTAS')
-    #Criando relatório
-    relatório = open(f'{out_relatório}_{time}.txt', 'w')
-    #Inserindo dados no relatório
-    relatório.write(
-        f'=-=-=-=-=-Relatório da raspagem-=-=-=-=-=\n'
-        f'- Data e hora: {time};\n'
-        f'- Lista de revistas: {revList};\n'
-        f'- Tipo de raspagem: {tipo}\n'
-        )
-    relatório.close    
 
-def report_erro (diretorio,error_list, saveMode):
-    '''
-    Função para criar relatório com erros ao baixar o xml.
-    '''
-    if saveMode == 1:
-        tipo = 'Apenas XLM'
-    else:
-        tipo = 'XML e Download de PDF'
-    #Criando pasta para salvar relatórios
-    report_path = diretorio
-    out_relatório = os.path.join(report_path, 'RELATÓRIO_ERRO')
-    #Criando relatório
-    relatório = open(f'{out_relatório}_{data_hora}.txt', 'w')
-    #Inserindo dados no relatório
-    relatório.write(
-        f'=-=-=-=-=-Relatório de erro-=-=-=-=-=\n'
-        f'- Data e hora: {data_hora};\n'
-        f'- Tipo de raspagem: {tipo};\n'
-        f'- Link do xml que apresentou erro e não foi baixado: {error_list}\n'
-        )
-    relatório.close
+def _tipo(save_mode):
+    return "Apenas XML" if save_mode == 1 else "XML e download de PDF"
 
-def report_erro_pdf (diretorio, error_pdf_list, saveMode):
-    '''
-    Função para criar relatório com erros ao baixar PDF.
-    '''
-    if saveMode == 1:
-        tipo = 'Apenas XLM'
-    else:
-        tipo = 'XML e Download de PDF'
-    #Criando pasta para salvar relatórios
-    current_dir = os.curdir
-    report_path = os.path.join(current_dir, diretorio)
-    out_relatório = os.path.join(report_path, 'RELATÓRIO_ERRO')
-    #Criando relatório
-    relatório = open(f'{out_relatório}_{data_hora}.txt', 'w')
-    #Inserindo dados no relatório
-    relatório.write(
-        f'=-=-=-=-=-Relatório de erro-=-=-=-=-=\n'
-        f'- Data e hora: {data_hora};\n'
-        f'- Tipo de raspagem: {tipo};\n'
-        f'- Link do pdf que apresentou erro e não foi baixado: {error_pdf_list}\n'
-        )
-    relatório.close
+
+def _write(path, text):
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8") as report:
+        report.write(text)
+
+
+def report_scrape(diretorio, timestamp, theme, save_mode):
+    _write(os.path.join(diretorio, f"RELATÓRIO_GERAL_{timestamp}.txt"),
+           f"=-=-=-=-=-Relatório da raspagem-=-=-=-=-=\n"
+           f"- Data: {timestamp};\n- Área Temática: {THEMES.get(str(theme), theme)};\n"
+           f"- Tipo de raspagem: {_tipo(save_mode)}\n")
+
+
+def report_scrape_rev(diretorio, timestamp, rev_list, save_mode):
+    _write(os.path.join(diretorio, f"RELATÓRIO_GERAL_REVISTAS_{timestamp}.txt"),
+           f"=-=-=-=-=-Relatório da raspagem-=-=-=-=-=\n"
+           f"- Data: {timestamp};\n- Lista de revistas: {rev_list};\n"
+           f"- Tipo de raspagem: {_tipo(save_mode)}\n")
+
+
+def report_erro(diretorio, error_list, save_mode):
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    _write(os.path.join(diretorio, f"RELATÓRIO_ERRO_{timestamp}.txt"),
+           f"=-=-=-=-=-Relatório de erro-=-=-=-=-=\n- Data: {timestamp};\n"
+           f"- Tipo de raspagem: {_tipo(save_mode)};\n"
+           f"- Links XML não baixados: {error_list}\n")
+
+
+def report_erro_pdf(diretorio, error_pdf_list, save_mode):
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    _write(os.path.join(diretorio, f"RELATÓRIO_ERRO_PDF_{timestamp}.txt"),
+           f"=-=-=-=-=-Relatório de erro-=-=-=-=-=\n- Data: {timestamp};\n"
+           f"- Tipo de raspagem: {_tipo(save_mode)};\n"
+           f"- Links PDF não baixados: {error_pdf_list}\n")

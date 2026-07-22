@@ -15,7 +15,7 @@ import re
 import time
 
 from issue_xml import get_issue
-from driver_utils import ano_da_edicao
+from driver_utils import ano_da_edicao, close_driver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -72,7 +72,7 @@ def _extract_issue_links(driver, journal_name):
     return []
 
 
-def revistas(diretorio, link, link_journal, journal_name, saveMode, ano_minimo=0, driver=None):
+def revistas(diretorio, link, link_journal, journal_name, saveMode, ano_minimo=0, driver=None, uploader=None):
     """
     Acessa a página de grid de uma revista e processa suas edições.
 
@@ -99,7 +99,7 @@ def revistas(diretorio, link, link_journal, journal_name, saveMode, ano_minimo=0
     if "not found" in page_title.lower() or "404" in page_title.lower():
         print(f"  ⚠️ {journal_name}: revista não encontrada (404). Pulando.")
         if own_driver:
-            driver.quit()
+            close_driver(driver)
         return
 
     # Verificar bloqueio Cloudflare/Bunny
@@ -111,7 +111,7 @@ def revistas(diretorio, link, link_journal, journal_name, saveMode, ano_minimo=0
     if "establishing a secure connection" in body_text or "security check" in body_text:
         print(f"  ⚠️ {journal_name}: bloqueado por proteção anti-bot. Pulando.")
         if own_driver:
-            driver.quit()
+            close_driver(driver)
         return
 
     # Nome da revista
@@ -142,7 +142,7 @@ def revistas(diretorio, link, link_journal, journal_name, saveMode, ano_minimo=0
         except Exception:
             print(f"  ℹ️ {journal_name}: sem edições encontradas. Pulando.")
         if own_driver:
-            driver.quit()
+            close_driver(driver)
         return
 
     # Deduplicar links (evitar processar a mesma edição duas vezes)
@@ -169,7 +169,7 @@ def revistas(diretorio, link, link_journal, journal_name, saveMode, ano_minimo=0
             break
 
         print(f"\n  Edição {ano}: {issue_link}")
-        get_issue(diretorio, link, issue_link, pasta, saveMode, driver=driver)
+        get_issue(diretorio, link, issue_link, pasta, saveMode, driver=driver, uploader=uploader)
 
     if own_driver:
-        driver.quit()
+        close_driver(driver)
