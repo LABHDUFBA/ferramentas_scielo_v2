@@ -20,51 +20,80 @@ Também disponibilizamos uma ferramenta para converter os XMLs para CSV, com o s
 
 ### Pré-requisitos
 
-Para executar a ferramenta é preciso clonar ou fazer download do repositório para sua máquina. Antes de executar os scripts, é preciso preparar seu computador, como mostramos abaixo.
+1. **Python 3.10+** — [instalação](https://python.org.br/instalacao-linux/)
+2. **Chromium** — instalado via snap no Ubuntu (`snap install chromium`) ou via gerenciador de pacotes em outras distribuições. O script detecta automaticamente o binário em `/snap/bin/chromium`.
+3. Clone o repositório e crie um ambiente virtual:
 
-A ferramentas desse projeto foram escritas em [Python 3.8](https://www.python.org/). Portanto, para executar o arquivo .py é preciso instalar o Python3 em seu computador.
+```bash
+git clone https://github.com/LABHDUFBA/ferramentas_scielo_v2.git
+cd ferramentas_scielo_v2
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
 
-[Clique aqui](https://python.org.br/instalacao-windows/) para acessar um tutorial de instalação do Python no Windows, [clique aqui](https://python.org.br/instalacao-linux/) para Linux e [clique aqui](https://python.org.br/instalacao-mac/)
-para Mac.
+### Navegador e WebDriver
 
-Após a instalação do Python é preciso instalar as bibliotecas necessárias para a ferramenta ser executada. Para isso, basta executar o comando `pip3 install -r requirements.txt` no terminal, a partir da pasta onde está o arquivo. Para saber mais sobre instalação de bibliotecas com pip, veja essa lição do [Programming Historian](https://programminghistorian.org/pt/licoes/instalacao-modulos-python-pip).
+O script utiliza **Chromium** (não Firefox) controlado pelo `webdriver-manager`, que baixa automaticamente a versão compatível do `chromedriver`. Não é necessário instalar o GeckoDriver ou configurar o PATH manualmente.
 
-1. Acesse o diretório em que o arquivo `requirements.txt` está salvo:
-   ```{.sh .bash}
-   $ cd <caminho para a pasta>
-   ```
-2. Instale as bibliotecas requeridas com o seguinte comando:
-   ```{.python}
-   pip3 install -r requirements.txt
-   ```
+> **Nota para usuários de Ubuntu/Debian:** o Chromium via snap funciona corretamente com as flags `--no-sandbox` e `--user-data-dir` configuradas automaticamente pelo script.
 
-#### WebDriver e Navegador
+### Requisitos (`requirements.txt`)
 
-Para que a ferramenta funcione, é necessário ter instalado o navegador [Mozilla Firefox](https://www.mozilla.org/pt-BR/firefox/new/). Além disso, é necessário ter instalado o WebDriver do Mozilla Firefox, GeckoDriver. 
+- `selenium` — automação do navegador
+- `webdriver-manager` — download automático do chromedriver
+- `bs4` / `beautifulsoup4` — parsing HTML
+- `lxml` — processamento de XML
+- `pandas` — exportação de dados
+- `requests` — requisições HTTP (fallback)
+- `wget` — downloads alternativos
 
-Para acessar a versão mais recente do GeckoDriver [visite o repositório do Mozilla no GitHub](https://github.com/mozilla/geckodriver/releases). É possível encontrar mais [informações oficiais aqui](https://firefox-source-docs.mozilla.org/testing/geckodriver/index.html).
+## Arquitetura
 
-Para inserir o webdriver no PATH de sistemas Unix e Windows, leia essa questão no [StackOverflow](https://stackoverflow.com/questions/40208051/selenium-using-python-geckodriver-executable-needs-to-be-in-path/40208762#40208762).
+```
+scielo_v2.py          ← Script principal (raspagem por área)
+  ├── driver_utils.py     ← Criação do driver, warm-up, downloads via fetch()
+  ├── revistas.py         ← Extração de revistas e edições por área
+  ├── issue_xml.py        ← Download de XMLs/PDFs por edição
+  └── reports.py          ← Geração de relatórios de erro
 
-Agora é possível executar a ferramenta direto do prompt de comando do Windows ou pelo terminal do Linux, ou utilizar as diversas [IDE](https://pt.wikipedia.org/wiki/Ambiente_de_desenvolvimento_integrado) disponíveis.
+scielo_rev_v2.py      ← Raspagem por revista individual
+  └── (mesmos módulos auxiliares)
+```
+
+### Fluxo de execução
+
+1. `scielo_v2.py` cria o driver Chromium e faz **warm-up** no SciELO (resolve Bunny Shield/Cloudflare)
+2. Navega até a página de revistas por área, expande o accordion da área escolhida
+3. `revistas.py` extrai os links de todas as revistas e, para cada uma, busca as edições na página `/grid`
+4. `issue_xml.py` processa cada edição: extrai links de artigos e baixa XMLs (e PDFs, se solicitado) via `fetch()` JavaScript reutilizando os cookies da sessão
+5. XMLs já existentes são **pulados automaticamente** — reexecuções são incrementais
+
+### Estratégias de resiliência
+
+- **Bunny Shield/Cloudflare:** warm-up automático com espera inteligente; detecção de páginas de bloqueio
+- **Layouts alternativos de `/grid`:** 4 estratégias de fallback para encontrar links de edições (issueList → tabela → links soltos → URL base sem `/grid`)
+- **Download de XML:** `fetch()` JS dentro da sessão (rápido); fallback para navegação direta se `fetch()` retornar 403
+- **Debug:** HTML de páginas problemáticas é salvo em `scielo/{data}/debug/`
+- **Reprocessamento incremental:** XMLs já baixados são pulados com `⏩`
 
 ## Utilização
 
-Na pasta da ferramenta existem dois arquivos python que permitem a execução de opções distintas de raspagem. O primeiro, `scielo_v2.py`, permite a raspagem de todas as revistas de uma determinada área do conhecimento. O segundo, `scielo_rev_v2.py`, permite a raspagem por revista ou lista de revistas específicas.
-
 ### Raspagem por área de conhecimento
 
-Esse script permite ao usuário selecionar qual assunto pretende raspar de acordo com a categorização estabelecida pela plataforma [Scielo.br](https://www.scielo.br/journals/thematic?status=current). 
-
-Para isso é preciso executar o seguinte comando, do interior da pasta onde o arquivo está localizado:
-
-```{.sh}
+```bash
+source venv/bin/activate
 python3 scielo_v2.py
 ```
-A seguinte mensagem será exibida:
 
-```{.python}
--=-Definição da área temática-=-
+O script solicitará:
+
+1. **Área temática** (1–8)
+2. **Tipo de raspagem** — 1 = XML apenas, 2 = XML + PDF
+3. **Filtro por ano mínimo** — opcional (ex.: `2023` para pular edições anteriores)
+
+```
+-=- Definição da área temática -=-
 
 - Opções:
 1- Ciências Agrárias
@@ -74,84 +103,73 @@ A seguinte mensagem será exibida:
 5- Ciências Humanas
 6- Ciências Sociais Aplicadas
 7- Engenharias
-8- Linguística, Letras e Artes
-Digite o número correspondente à área temática que deseja raspar: 
-```
-Após a definição do assunto, é preciso definir o tipo de raspagem: 
-
-1. Realizar a raspagem de todos os arquivos XML de todas as edições de todas as revistas da área selecionada: opção `1`;
-2. Realizar a raspagem de todos os arquivos XML e PDF de todas as edições de todas as revistas da área selecionada: opção `2`.
-   
-:warning: Devido ao volume de dados, contando dezenas de milhares de artigos, o download de todos os arquivos PDF demandará  muito tempo e uso intenso de sua máquina.
-    
-:warning: Os arquivos XML possuem todos os metadados dos artigos, incluindo o texto completo e as referências bibliográficas.
-
-### Raspagem por revista ou por lista de revistas
-
-Nesse script é possível raspar uma revista ou uma lista de revistas específicas através de seu nome.
-
-Possui as mesmas características do `scielo_v2.py`, porém a definição da(s) revista(s) a ser(em) raspada(s) é feita através da abreviação do nome da revista conforme URL da revista no site do Scielo.br.
-
-Por exemplo, se vc pretende raspar os arquivos da revista Almanack, acesse a página inicial da revista no repositório e encontre a abreviação de seu título na URL.
-
-```{.html}
-https://www.scielo.br/j/alm/
+8- Lingüística, Letras e Artes
+Digite o número correspondente à área temática que deseja raspar:
 ```
 
-Nesse caso, o abreviação do nome da revista é `alm`. Esse termo deve ser informado para o programa.
+### Raspagem por revista individual
 
-```{.sh}
--=- Definição da(s) revista(s) -=-
-
-Digite a abreviação da revista que deseja raspar: alm
-Deseja inserir outra? [S/N]
+```bash
+python3 scielo_rev_v2.py
 ```
 
-:warning: Atenção
+Forneça a abreviação da revista conforme a URL:
 
-Ambos os scripts criarão diretórios para armazenar os arquivos e dados.
+```
+https://www.scielo.br/j/asoc/  →  abreviação: asoc
+```
 
-- `scielo/{AAAA-MM-DD}/PDF/{nomeDaRevista}` no caso da raspagem de PDFs;
-- `scielo/{AAAA-MM-DD}/XML/{nomeDaRevista}` no caso da raspagem de XMls.
+### Estrutura de saída
 
-Entretanto, se a pasta com o nome de uma revista já existir no mesmo caminho que o programa está sendo executado, só serão baixados arquivos que ainda não existem.
+```
+scielo/
+  └── {AAAA-MM-DD}/
+      ├── XML/
+      │   ├── Ambiente_&_Sociedade/
+      │   │   ├── S0101-31502023000100001.xml
+      │   │   └── ...
+      │   └── Revista_de_Administração_Pública/
+      │       └── ...
+      ├── PDF/          ← (apenas se saveMode=2)
+      │   └── ...
+      └── debug/        ← HTMLs de páginas problemáticas
+```
+
+> **Reprocessamento incremental:** se a pasta de uma revista já existir, apenas os arquivos que ainda não foram baixados serão baixados. É seguro interromper e retomar a coleta.
+
+### Parâmetros via variáveis de ambiente
+
+O script aceita variáveis de ambiente para execução não-interativa (útil para cron ou pipelines):
+
+| Variável | Descrição | Exemplo |
+|---|---|---|
+| `SCIELO_AREA` | Número da área (1–8) | `6` |
+| `SCIELO_MODE` | Tipo de raspagem (1 ou 2) | `1` |
+| `SCIELO_ANO_MINIMO` | Ano mínimo (0 = sem filtro) | `2023` |
 
 ## Conversão de XML para CSV
 
-Após o download dos arquivos XML é possível utilizar a ferramenta `scielo_xml_to_csv` para converter todos os XML para um arquivo `csv`.
+Após o download dos arquivos XML, utilize `scielo_xml_to_csv/run.py` para converter todos os XML em CSV.
 
-Acesse a pasta `scielo_xml_to_csv` e execute o arquivo `run.py`.
+```bash
+cd scielo_xml_to_csv
+python3 run.py
+```
 
-Esses scripts têm como objetivos analisar, selecionar, organizar e salvar informações de um dataset de arquivos XML de todas as revistas previamente baixados em um arquivo CSV.
+Campos extraídos: `file_name`, `article_id`, `article_category`, `authors`, `contact_email`, `authors_affiliation`, `article_title`, `journal_title`, `journal_issn`, `journal_publisher`, `pub_date`, `abstract`, `key_words`, `issue`, `num`, `doi`, `full_text`, `footnotes`, `refs`.
 
-O `run.py` acessa o diretório contendo as pastas de cada revista e analisa cada XML, inserindo os dados em um arquivo CSV salvo com o nome `metadata_{revista}.csv`. 
+## Limitações conhecidas
 
-:warning: _É preciso definir o caminho do diretório com o dataset. E a estrutura desse dataset deve conter diretórios de cada revista (ou edições) com seus arquivos XML a serem analisados._
+- **Rate limiting:** o SciELO (Bunny Shield/Cloudflare) bloqueia IPs após raspagem prolongada (~11h contínuas). Se ocorrer bloqueio, aguarde algumas horas ou troque de IP.
+- **Revistas sem `/grid` padrão:** algumas revistas usam layouts alternativos. O script possui fallbacks, mas pode haver casos raros que exigem inspeção manual (HTML de debug é salvo automaticamente).
+- **PDFs:** o download de PDFs consome banda e tempo significativos. Recomendamos iniciar com modo 1 (XML apenas).
+- **Headless:** o script roda em modo headless por padrão. Para depuração visual, remova a flag `--headless=new` em `driver_utils.py`.
 
-As seguintes informações são inseridas no CSV:
+## Histórico de mudanças
 
-- index,
-- file_name: nome do arquivo,
-- article_id: identificação do arquivo,
-- article_category: categoria do arquivo,
-- authors: lista de autores,
-- contact_email: e-mail do/a autor/a principal
-- authors affiliation: lista de filiações,
-- article_title: título do artigo,
-- journal_title: título do revista,
-- journal_issn: ISSN da revista,
-- journal_publisher: instituição da revista,
-- pub_date: ano da publicação,
-- abstract: resumo,
-- key_words: lista de palavras-chave,
-- issue: edição,
-- num: número,
-- doi: DOI,
-- full_text: texto completo do artigo,
-- footnotes: notas de rodapé,
-- refs: lista (contendo listas) das referências bibliográficas.
-
-Em seguida, com a função `df_final()`, todos os arquivos CSV são unidos em um único *dataframe* com `Pandas` e salvos em um CSV chamado `metadata_scielo_{yyyy-mm-dd_H-M-S}.csv`.
+- **v2.3** (jun/2026) — Migração completa de Firefox/GeckoDriver para Chromium/webdriver-manager; download de XML via `fetch()` JS; fallbacks para layouts alternativos de `/grid`; warm-up automático contra Bunny Shield; reprocessamento incremental; flag `--no-sandbox` para snap; debug HTML automático
+- **v2.2** — Conversão para XML→CSV enriquecida (autores, keywords, referências em NDJSON)
+- **v2.1** — Atualização para nova versão do site SciELO (Selenium + BeautifulSoup)
 
 ---
 
@@ -175,7 +193,7 @@ Abaixo a citação no formato BibTex:
   note         = {{Se você utilizar esse programa, por favor cite 
                    como referenciado abaixo.}},
   publisher    = {Zenodo},
-  version      = {2.2},
+  version      = {2.3},
   doi          = {10.5281/zenodo.5168727},
   url          = {https://doi.org/10.5281/zenodo.5168727}
 }
@@ -185,5 +203,5 @@ Abaixo a citação no formato BibTex:
 
 [MIT Licence](LICENSE)
 
-2021 [Eric Brasil (IHL/UNILAB, LABHDUFBA)](https://github.com/ericbrasiln), [Gabriel Andrade (UFBA, LABHDUFBA)](https://github.com/gabrielsandrade), [Leonardo Nascimento (UFBA, LABHDUFBA)](https://github.com/leofn)
+2021–2026 [Eric Brasil (IHL/UNILAB, LABHDUFBA)](https://github.com/ericbrasiln), [Gabriel Andrade (UFBA, LABHDUFBA)](https://github.com/gabrielsandrade), [Leonardo Nascimento (UFBA, LABHDUFBA)](https://github.com/leofn)
 [Jorge Barbosa (PPGCS/UFBA, LABHDUFBA)](https://github.com/jhsbarbosa)
